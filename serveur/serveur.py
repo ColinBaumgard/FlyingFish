@@ -39,20 +39,28 @@ class Interface(threading.Thread, Frame):
         self.boxPort = Spinbox(self.frameOption, from_=0, to=50000, textvariable=value)
         self.boxPort.grid(row=1, column=1)
 
+        self.boxRun = Button(self.frameOption, text="Lancer", command=self.lancer)
+        self.boxRun.grid(row=2, column=0, columnspan=2)
+
         # Frame INfo
 
         self.frameInfo = LabelFrame(self.fenetre, text="Info", padx=5, pady=5)
         self.frameInfo.grid(row=0, column=1)
 
-        self.textCompteur = Label(self.frameInfo, text="On est: ")
-        self.textCompteur.grid(row=0, column=0)
+        self.textCompteur = Label(self.frameInfo, text=": personnes connectés ")
+        self.textCompteur.grid(row=0, column=1, sticky=W)
         self.boxCompteur = Label(self.frameInfo)
-        self.boxCompteur.grid(row=0, column=1)
+        self.boxCompteur.grid(row=0, column=0)
 
-        self.textNbreMessages = Label(self.frameInfo, text="Nombre de messages envoyés: ")
-        self.textNbreMessages.grid(row=1, column=0)
+        self.textNbreMessages = Label(self.frameInfo, text=": messages envoyés ")
+        self.textNbreMessages.grid(row=1, column=1, sticky=W)
         self.boxNbreMessages = Label(self.frameInfo)
-        self.boxNbreMessages.grid(row=1, column=1)
+        self.boxNbreMessages.grid(row=1, column=0)
+
+        self.textEtat = Label(self.frameInfo, text=": état du serveur")
+        self.textEtat.grid(row=2, column=1, sticky=W)
+        self.boxEtat = Label(self.frameInfo, text="Etat")
+        self.boxEtat.grid(row=2, column=0)
 
         # Frame log
 
@@ -68,7 +76,8 @@ class Interface(threading.Thread, Frame):
         self.boxLog.pack(fill="both")
         self.boxLog.config(state="disabled")
 
-
+    def lancer(self):
+        print("Lancement demandé !")
 
 
 
@@ -78,6 +87,7 @@ class Interface(threading.Thread, Frame):
 
 fenetre = Tk()
 fenetre.title("Flying Fish")
+fenetre.resizable(0,0)
 interface = Interface(fenetre)
 
 interface.mainloop()
