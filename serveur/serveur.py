@@ -4,7 +4,13 @@
 import os
 from tkinter import *
 import threading
+import time
 
+verrouInput = threading.RLock()
+verrouOuput = threading.RLock()
+
+outputQueue = {'nombresMessages':1, 'nombresConnectes':0, 'etat':'off', 'log':''}
+inputQueue = {'port':0, 'nom':'', 'bouton':0}
 
 
 
@@ -14,8 +20,13 @@ class Interface(threading.Thread, Frame):
         threading.Thread.__init__(self)
         self.fenetre = fenetre
         Frame.__init__(self, self.fenetre, **kwargs)
-        self.construire()
 
+        self.nombreMessages = 0
+        self.nombreConnectes = 0
+        self.log = ''
+
+        self.construire()
+        self.showOuput()
 
 
     def construire(self):
@@ -54,7 +65,7 @@ class Interface(threading.Thread, Frame):
 
         self.textNbreMessages = Label(self.frameInfo, text=": messages envoyés ")
         self.textNbreMessages.grid(row=1, column=1, sticky=W)
-        self.boxNbreMessages = Label(self.frameInfo)
+        self.boxNbreMessages = Label(self.frameInfo, text=self.nombreMessages)
         self.boxNbreMessages.grid(row=1, column=0)
 
         self.textEtat = Label(self.frameInfo, text=": état du serveur")
@@ -76,8 +87,64 @@ class Interface(threading.Thread, Frame):
         self.boxLog.pack(fill="both")
         self.boxLog.config(state="disabled")
 
+    def showOuput(self):
+        self.fenetre.after(100, self.showOuput)
+        self.getOutput()
+
+        self.boxNbreMessages.config(text=self.nombreMessages)
+        self.boxNbreMessages.grid()
+
+        self.boxCompteur.config(text=self.nombreConnectes)
+        self.boxCompteur.grid()
+
+        self.boxLog.insert(END, '\n'+time.strftime("%H:%M:%S -> ")+self.log)
+        self.boxLog.pack()
+
+
     def lancer(self):
         print("Lancement demandé !")
+
+    def addToInput(self, nom, valeur):
+        with verrouInput:
+            outputQueue[nom] = valeur
+
+    def getOutput(self):
+        with verrouOuput:
+            self.nombreMessages = outputQueue['nombresMessages']
+            self.nombreConnectes = outputQueue['nombresConnectes']
+            self.log = outputQueue['log']
+
+
+class Modele(threading.Thread):
+
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+        self.mainloop()
+
+    def mainloop(self):
+        i = 0
+        while 1:
+            i += 1
+            self.addOutput('nombreMessages', i)
+            time.sleep(1)
+
+
+    def addOutput(self, nom, valeur):
+        with verrouOuput:
+            outputQueue[nom] = valeur
+
+
+    def getInput(self):
+        with verrouInput:
+            self.nom = inputQueue['nom']
+            self.port = inputQueue['port']
+            self.bouton = inputQueue['bouton']
+
+            inputQueue['bouton'] = 0
+
+
 
 
 
@@ -90,5 +157,7 @@ fenetre.title("Flying Fish")
 fenetre.resizable(0,0)
 interface = Interface(fenetre)
 
+
+
 interface.mainloop()
-interface.destroy()
+
