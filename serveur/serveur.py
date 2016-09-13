@@ -9,15 +9,15 @@ import time
 verrouInput = threading.RLock()
 verrouOuput = threading.RLock()
 
-outputQueue = {'nombresMessages':1, 'nombresConnectes':0, 'etat':'off', 'log':''}
+outputQueue = {'nombreMessages':1, 'nombreConnectes':0, 'etat':'off', 'log':''}
 inputQueue = {'port':0, 'nom':'', 'bouton':0}
 
 
 
-class Interface(threading.Thread, Frame):
+class Interface(Frame):
 
     def __init__(self, fenetre, **kwargs):
-        threading.Thread.__init__(self)
+
         self.fenetre = fenetre
         Frame.__init__(self, self.fenetre, **kwargs)
 
@@ -28,6 +28,13 @@ class Interface(threading.Thread, Frame):
         self.construire()
         self.showOuput()
 
+
+
+    def buttonPressed(self):
+        self.addToInput('nom', self.boxName.get())
+        self.addToInput('port', int(self.boxPort.get()))
+        self.addToInput('bouton', 1)
+        print("done")
 
     def construire(self):
 
@@ -50,7 +57,7 @@ class Interface(threading.Thread, Frame):
         self.boxPort = Spinbox(self.frameOption, from_=0, to=50000, textvariable=value)
         self.boxPort.grid(row=1, column=1)
 
-        self.boxRun = Button(self.frameOption, text="Lancer", command=self.lancer)
+        self.boxRun = Button(self.frameOption, text="Lancer", command=self.buttonPressed())
         self.boxRun.grid(row=2, column=0, columnspan=2)
 
         # Frame INfo
@@ -101,18 +108,17 @@ class Interface(threading.Thread, Frame):
         self.boxLog.pack()
 
 
-    def lancer(self):
-        print("Lancement demandé !")
-
     def addToInput(self, nom, valeur):
         with verrouInput:
             outputQueue[nom] = valeur
 
     def getOutput(self):
         with verrouOuput:
-            self.nombreMessages = outputQueue['nombresMessages']
-            self.nombreConnectes = outputQueue['nombresConnectes']
+            self.nombreMessages = outputQueue['nombreMessages']
+            self.nombreConnectes = outputQueue['nombreConnectes']
             self.log = outputQueue['log']
+
+
 
 
 class Modele(threading.Thread):
@@ -120,15 +126,13 @@ class Modele(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
+        self.running = True
 
-        self.mainloop()
 
-    def mainloop(self):
+    def run(self):
         i = 0
-        while 1:
-            i += 1
-            self.addOutput('nombreMessages', i)
-            time.sleep(1)
+        while self.running:
+            print("Too mcuh !")
 
 
     def addOutput(self, nom, valeur):
@@ -145,19 +149,29 @@ class Modele(threading.Thread):
             inputQueue['bouton'] = 0
 
 
+    def stop(self):
+        self.running = False
 
 
 
 
 
-
+#definition fenetre
 
 fenetre = Tk()
 fenetre.title("Flying Fish")
 fenetre.resizable(0,0)
 interface = Interface(fenetre)
 
+#definition modele
+
+modele = Modele()
 
 
-interface.mainloop()
+#lancement des threads
+modele.start()
 
+fenetre.mainloop()
+
+modele.stop()
+modele.join()
