@@ -5,12 +5,19 @@ import os
 from tkinter import *
 import threading
 import time
+import queue
 
-verrouInput = threading.RLock()
-verrouOuput = threading.RLock()
 
-outputQueue = {'nombreMessages':1, 'nombreConnectes':0, 'etat':'off', 'log':''}
-inputQueue = {'port':0, 'nom':'', 'bouton':0}
+
+
+outputQueue = queue.Queue()
+inputQueue = queue.Queue()
+
+#outputQueue.put_nowait({'nombreMessages':1, 'nombreConnectes':0, 'etat':'off', 'log':''})
+#inputQueue.put_nowait({'port':0, 'nom':'', 'bouton':0})
+
+sendQueue = queue.Queue()
+recvQueue = queue.Queue()
 
 
 
@@ -28,13 +35,8 @@ class Interface(Frame):
         self.construire()
         self.showOuput()
 
+        self.dicoTmpGetOuput = {'nombreMessages': 0, 'nombreConnectes': 0, 'etat': 'off', 'log': ''}
 
-
-    def buttonPressed(self):
-        self.addToInput('nom', self.boxName.get())
-        self.addToInput('port', int(self.boxPort.get()))
-        self.addToInput('bouton', 1)
-        print("done")
 
     def construire(self):
 
@@ -57,7 +59,7 @@ class Interface(Frame):
         self.boxPort = Spinbox(self.frameOption, from_=0, to=50000, textvariable=value)
         self.boxPort.grid(row=1, column=1)
 
-        self.boxRun = Button(self.frameOption, text="Lancer", command=self.buttonPressed())
+        self.boxRun = Button(self.frameOption, text="Lancer", command=self.refreshInput())
         self.boxRun.grid(row=2, column=0, columnspan=2)
 
         # Frame INfo
@@ -108,15 +110,30 @@ class Interface(Frame):
         self.boxLog.pack()
 
 
-    def addToInput(self, nom, valeur):
-        with verrouInput:
-            outputQueue[nom] = valeur
+    def refreshInput(self):
+
+        outputQueue.put_nowait({'nom': self.boxName.get(), 'port': int(self.boxPort.get())})
 
     def getOutput(self):
-        with verrouOuput:
-            self.nombreMessages = outputQueue['nombreMessages']
-            self.nombreConnectes = outputQueue['nombreConnectes']
-            self.log = outputQueue['log']
+
+
+
+
+        try:
+            outputDico = outputQueue.get_nowait()
+            for cle, valeur in outputDico.items():
+                self.dicoTmpGetOuput[cle] = valeur
+
+            self.nombreMessages = self.dicoTmpGetOuput['nombreMessages']
+            self.nombreConnectes = self.dicoTmpGetOuput['nombreConnectes']
+            self.log = self.dicoTmpGetOuput['log']
+            self.etat = self.dicoTmpGetOuput['etat']
+
+        except:
+            pass
+
+
+
 
 
 
@@ -132,21 +149,40 @@ class Modele(threading.Thread):
     def run(self):
         i = 0
         while self.running:
-            print("Too mcuh !")
+            i += 1
+            self.addOutput({'nombreMessages':i, 'log':'Coucou'})
+            time.sleep(1)
 
 
-    def addOutput(self, nom, valeur):
-        with verrouOuput:
-            outputQueue[nom] = valeur
+    #Communication avec thread d'affichage (interface)
+    def addOutput(self, dicoNomValeur):
 
+        outputQueue.put_nowait(dicoNomValeur)
 
     def getInput(self):
-        with verrouInput:
-            self.nom = inputQueue['nom']
-            self.port = inputQueue['port']
-            self.bouton = inputQueue['bouton']
 
-            inputQueue['bouton'] = 0
+        dicoTmp = {'port':0, 'nom':''}
+        try:
+            input = inputQueue.get_nowait()
+            for cle, valeur in input.items():
+                dicoTmp[cle] = valeur
+        except:
+            pass
+
+        self.nom = dicoTmp['nom']
+        self.port = dicoTmp['port']
+
+
+
+    #communication avec thread de connexion reseau (comm avec clients)
+    def sendQueue(self, nomClient, message):
+
+        sendQueue.put_nowait({'nom':nomClient, 'message':message})
+
+    def getQueue(self):
+
+        return recvQueue.get_nowait()
+
 
 
     def stop(self):
