@@ -150,8 +150,12 @@ class Modele(threading.Thread):
         i = 0
         while self.running:
             i += 1
+            logtmp = self.nom
             self.getInput()
-            self.addOutput({'nombreMessages':i, 'log':self.nom, 'etat':'ON', 'nombreConnectes':self.port})
+            if logtmp != self.nom:
+                self.addOutput({'log': self.nom})
+
+            self.addOutput({'nombreMessages':i, 'etat':'ON', 'nombreConnectes':self.port})
             time.sleep(1)
 
 
