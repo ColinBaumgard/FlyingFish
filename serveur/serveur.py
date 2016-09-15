@@ -33,9 +33,9 @@ class Interface(Frame):
         self.log = ''
 
         self.construire()
-        self.showOuput()
+        self.getAndShowOutput()
 
-        self.dicoTmpGetOuput = {'nombreMessages': 0, 'nombreConnectes': 0, 'etat': 'off', 'log': ''}
+        self.dicoTmpGetOuput = {}
 
 
     def construire(self):
@@ -59,7 +59,7 @@ class Interface(Frame):
         self.boxPort = Spinbox(self.frameOption, from_=0, to=50000, textvariable=value)
         self.boxPort.grid(row=1, column=1)
 
-        self.boxRun = Button(self.frameOption, text="Lancer", command=self.refreshInput())
+        self.boxRun = Button(self.frameOption, text="Lancer", command=self.refreshInput)
         self.boxRun.grid(row=2, column=0, columnspan=2)
 
         # Frame INfo
@@ -96,38 +96,35 @@ class Interface(Frame):
         self.boxLog.pack(fill="both")
         self.boxLog.config(state="disabled")
 
-    def showOuput(self):
-        self.fenetre.after(100, self.showOuput)
-        self.getOutput()
-
-        self.boxNbreMessages.config(text=self.nombreMessages)
-        self.boxNbreMessages.grid()
-
-        self.boxCompteur.config(text=self.nombreConnectes)
-        self.boxCompteur.grid()
-
-        self.boxLog.insert(END, '\n'+time.strftime("%H:%M:%S -> ")+self.log)
-        self.boxLog.pack()
-
 
     def refreshInput(self):
 
-        outputQueue.put_nowait({'nom': self.boxName.get(), 'port': int(self.boxPort.get())})
+        inputQueue.put_nowait({'nom': self.boxName.get(), 'port': int(self.boxPort.get())})
+        
 
-    def getOutput(self):
-
-
+    def getAndShowOutput(self):
+        
+        self.fenetre.after(100, self.getAndShowOutput)
 
 
         try:
             outputDico = outputQueue.get_nowait()
             for cle, valeur in outputDico.items():
-                self.dicoTmpGetOuput[cle] = valeur
-
-            self.nombreMessages = self.dicoTmpGetOuput['nombreMessages']
-            self.nombreConnectes = self.dicoTmpGetOuput['nombreConnectes']
-            self.log = self.dicoTmpGetOuput['log']
-            self.etat = self.dicoTmpGetOuput['etat']
+                if(cle == 'nombreMessages'):
+                    self.boxNbreMessages.config(text=valeur)
+                    self.boxNbreMessages.grid()
+                elif(cle == 'nombreConnectes'):
+                    self.boxCompteur.config(text=valeur)
+                    self.boxCompteur.grid()
+                elif(cle == 'log'):
+                    self.boxLog.config(state="normal")
+                    self.boxLog.insert(END, '\n'+time.strftime("%H:%M:%S -> ")+valeur)
+                    self.boxLog.config(state="disable")
+                    self.boxLog.pack()
+                elif(cle == 'etat'):
+                    self.boxEtat.config(text=valeur)
+                    self.boxEtat.grid()
+                
 
         except:
             pass
@@ -144,13 +141,17 @@ class Modele(threading.Thread):
     def __init__(self):
         threading.Thread.__init__(self)
         self.running = True
+        
+        self.nom = ''
+        self.port = 0
 
 
     def run(self):
         i = 0
         while self.running:
             i += 1
-            self.addOutput({'nombreMessages':i, 'log':'Coucou'})
+            self.getInput()
+            self.addOutput({'nombreMessages':i, 'log':self.nom, 'etat':'ON', 'nombreConnectes':self.port})
             time.sleep(1)
 
 
@@ -161,16 +162,24 @@ class Modele(threading.Thread):
 
     def getInput(self):
 
-        dicoTmp = {'port':0, 'nom':''}
+        inputDico = {}
         try:
-            input = inputQueue.get_nowait()
-            for cle, valeur in input.items():
-                dicoTmp[cle] = valeur
+            inputDico = inputQueue.get_nowait()
+            
+            
         except:
             pass
+            
+        for cle, valeur in inputDico.items():
+            
+            if cle == 'port':
+                self.port = valeur
+        
+            elif cle == 'nom':
+                self.nom = valeur
+                
+            
 
-        self.nom = dicoTmp['nom']
-        self.port = dicoTmp['port']
 
 
 
