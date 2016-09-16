@@ -131,10 +131,6 @@ class Interface(Frame):
 
 
 
-
-
-
-
 class Modele(threading.Thread):
 
 
@@ -154,6 +150,8 @@ class Modele(threading.Thread):
             self.getInput()
             if logtmp != self.nom:
                 self.addOutput({'log': self.nom})
+
+            self.sendQueue('192.168.0.12', 'msg', 'coucou')
 
             self.addOutput({'nombreMessages':i, 'etat':'ON', 'nombreConnectes':self.port})
             time.sleep(1)
@@ -182,19 +180,24 @@ class Modele(threading.Thread):
             elif cle == 'nom':
                 self.nom = valeur
                 
-            
-
-
 
 
     #communication avec thread de connexion reseau (comm avec clients)
-    def sendQueue(self, nomClient, message):
+    def sendQueue(self, ipClient, type, message):
 
-        sendQueue.put_nowait({'nom':nomClient, 'message':message})
+        self.addOutput({'log': "Erreur lors de l'envoie du message @" + ipClient + " !"})
+        try:
+            sendQueue.put_nowait({'ip':ipClient, 'type':type, 'message':message})
+        except:
+            self.addOutput({'log':"Erreur lors de l'envoie du message @" + ipClient + " !"})
 
     def getQueue(self):
 
-        return recvQueue.get_nowait()
+        try:
+            return recvQueue.get_nowait()
+
+        except:
+            return False
 
 
 
