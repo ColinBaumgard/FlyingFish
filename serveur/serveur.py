@@ -6,6 +6,9 @@ from tkinter import *
 import threading
 import time
 import queue
+import socket
+import select
+import pickle
 
 
 
@@ -16,8 +19,8 @@ inputQueue = queue.Queue()
 #outputQueue.put_nowait({'nombreMessages':1, 'nombreConnectes':0, 'etat':'off', 'log':''})
 #inputQueue.put_nowait({'port':0, 'nom':'', 'bouton':0})
 
-sendQueue = queue.Queue()
-recvQueue = queue.Queue()
+downQueue = queue.Queue()
+upQueue = queue.Queue()
 
 
 
@@ -146,20 +149,19 @@ class Modele(threading.Thread):
         i = 0
         while self.running:
             #tant qu'on a pas appuié sur stop
-            if __name__ == '__main__':
-                if self.getInput():
-                    #si on a lancé
-                    while self.getInput() == False & self.running:
-                        #tant que l'on a pas lancé une autre fois
+            if self.getInput():
+                #si on a lancé
+                while self.getInput() == False and self.running:
+                    #tant que l'on a pas lancé une autre fois
 
-                        requeteClient = self.getQueue()
+                    requeteClient = self.getQueue()
 
-                        if requeteClient != False:
+                    if requeteClient != False:
 
-                            if requeteClient['type'] == 'msg':
-                                self.sendQueue(requeteClient['ip'], 'msg', requeteClient['msg'])
-                            else:
-                                self.addOutput({'log':'Commande serveur: ' + requeteClient['type'] + ' pas encore implémentée.'})
+                        if requeteClient['type'] == 'msg':
+                            self.downQueue('send@all', requeteClient['msg'])
+                        else:
+                            self.addOutput({'log':'Commande serveur: ' + requeteClient['type'] + ' pas encore implémentée.'})
 
 
 
@@ -192,17 +194,17 @@ class Modele(threading.Thread):
 
 
     #communication avec thread de connexion reseau (comm avec clients)
-    def sendQueue(self, ipClient, type, message):
+    def downQueue(self, type, var):
 
         try:
-            sendQueue.put_nowait({'ip':ipClient, 'type':type, 'msg':message})
+            downQueue.put_nowait({'type':type, 'var':var})
         except:
-            self.addOutput({'log':"Erreur lors de l'envoie du message @" + ipClient + " !"})
+            self.addOutput({'log':"Erreur: downQueue in Modele"})
 
     def getQueue(self):
 
         try:
-            tmp = recvQueue.get_nowait()
+            tmp = upQueue.get_nowait()
             tmp2 = tmp['type']
 
             return tmp
@@ -210,12 +212,146 @@ class Modele(threading.Thread):
         except:
             return False
 
-
-
     def stop(self):
         self.running = False
 
 
+class Reseau(threading.Thread):
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+        self.running = True
+
+        self.port = 4545
+        self.hote = ''
+
+        self.listeClients = []
+
+        #on lance une connexion
+
+        self.connexion_principale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connexion_principale.bind((self.hote, self.port))
+        self.connexion_principale.listen(5)
+        self.addOutput({'log': "Le serveur est sur le port {}".format(self.port)})
+
+
+    def run(self):
+
+        while self.running :
+
+            queue = self.from_downQueue()
+            if queue != False:
+
+                if queue['type'] == 'port':
+                    self.port = queue['port']
+
+                    #on actualise la connexion au port demandé
+                    self.connexion_principale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                    self.connexion_principale.bind((self.hote, self.port))
+                    self.connexion_principale.listen(5)
+                    self.addOutput({'log':"Le serveur est sur le port {}".format(self.port)})
+
+
+            # ecoute pour des demandes de connexion
+            self.checkDemandes()
+
+            #ecoute les requetes des clients
+            clients_a_lire = self.checkClients_a_lire()
+
+            #envoie info dans la Queue
+            try:
+                for client in clients_a_lire:
+                    msg_brut = client.recv(1024)
+                    msg_brut = msg_brut.loads()
+
+                    if isinstance(msg_brut, type([])):
+                        self.to_upQueue('recv', msg_brut)
+            except:
+                pass
+
+            #lit Queue modèle
+            msg_modele = self.from_downQueue()
+            try:
+                if msg_modele['type'] == 'send@all':
+                    self.send_at_all(msg_modele['var'])
+
+            except:
+                self.addOutput({'log': "Erreur lecture queue modèle in Reseau"})
+
+
+
+    def send_at_all(self, var):
+        try:
+            var = var.dumps()
+            for client in self.listeClients:
+                client.send(var)
+        except:
+            self.addOutput({'log': "Erreur in send@all in Reseau"})
+
+
+    def checkDemandes(self):
+
+        connexions_demandees, wlist, xlist = select.select([self.connexion_principale], [], [], 0.05)
+
+        for connexion in connexions_demandees:
+            connexion_avec_client, infos_connexion = connexion.accept()
+            self.listeClients.append(connexion_avec_client)
+
+    def checkClients_a_lire(self):
+        client_a_lire = []
+        try:
+            client_a_lire, wlist, xlist = select.select(self.listeClients, [], [], 0.05)
+            return client_a_lire
+        except select.error:
+            return []
+
+
+    # communication avec thread de modèle (comm avec clients)
+    def to_upQueue(self, type, var):
+
+        try:
+            upQueue.put_nowait({'type': type, 'var': var})
+        except:
+            self.addOutput({'log': "Erreur downQueue in Reseau"})
+
+    def from_downQueue(self):
+
+        try:
+            tmp = upQueue.get_nowait()
+            tmp2 = tmp['type']
+
+            return tmp
+
+        except:
+            return False
+
+    # Communication avec thread d'affichage (interface)
+    def addOutput(self, dicoNomValeur):
+
+        outputQueue.put_nowait(dicoNomValeur)
+
+    def getInput(self):
+
+        inputDico = {}
+        try:
+            inputDico = inputQueue.get_nowait()
+
+            for cle, valeur in inputDico.items():
+
+                if cle == 'port':
+                    self.port = valeur
+
+                elif cle == 'nom':
+                    self.nom = valeur
+
+            return True
+
+        except:
+            return False
+
+
+    def stop(self):
+        self.running = False
 
 
 
@@ -230,10 +366,12 @@ interface = Interface(fenetre)
 #definition modele
 
 modele = Modele()
+reseau = Reseau()
 
 
 #lancement des threads
 modele.start()
+reseau.start()
 
 fenetre.mainloop()
 
@@ -241,4 +379,6 @@ fenetre.mainloop()
 
 
 modele.stop()
+reseau.stop()
+reseau.join()
 modele.join()
