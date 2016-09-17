@@ -145,16 +145,23 @@ class Modele(threading.Thread):
     def run(self):
         i = 0
         while self.running:
-            i += 1
-            logtmp = self.nom
-            self.getInput()
-            if logtmp != self.nom:
-                self.addOutput({'log': self.nom})
+            #tant qu'on a pas appuié sur stop
+            if __name__ == '__main__':
+                if self.getInput():
+                    #si on a lancé
+                    while self.getInput() == False & self.running:
+                        #tant que l'on a pas lancé une autre fois
 
-            self.sendQueue('192.168.0.12', 'msg', 'coucou')
+                        requeteClient = self.getQueue()
 
-            self.addOutput({'nombreMessages':i, 'etat':'ON', 'nombreConnectes':self.port})
-            time.sleep(1)
+                        if requeteClient != False:
+
+                            if requeteClient['type'] == 'msg':
+                                self.sendQueue(requeteClient['ip'], 'msg', requeteClient['msg'])
+                            else:
+                                self.addOutput({'log':'Commande serveur: ' + requeteClient['type'] + ' pas encore implémentée.'})
+
+
 
 
     #Communication avec thread d'affichage (interface)
@@ -167,34 +174,38 @@ class Modele(threading.Thread):
         inputDico = {}
         try:
             inputDico = inputQueue.get_nowait()
+
+            for cle, valeur in inputDico.items():
+
+                if cle == 'port':
+                    self.port = valeur
+
+                elif cle == 'nom':
+                    self.nom = valeur
+
+            return True
             
             
         except:
-            pass
+            return False
             
-        for cle, valeur in inputDico.items():
-            
-            if cle == 'port':
-                self.port = valeur
-        
-            elif cle == 'nom':
-                self.nom = valeur
-                
 
 
     #communication avec thread de connexion reseau (comm avec clients)
     def sendQueue(self, ipClient, type, message):
 
-        self.addOutput({'log': "Erreur lors de l'envoie du message @" + ipClient + " !"})
         try:
-            sendQueue.put_nowait({'ip':ipClient, 'type':type, 'message':message})
+            sendQueue.put_nowait({'ip':ipClient, 'type':type, 'msg':message})
         except:
             self.addOutput({'log':"Erreur lors de l'envoie du message @" + ipClient + " !"})
 
     def getQueue(self):
 
         try:
-            return recvQueue.get_nowait()
+            tmp = recvQueue.get_nowait()
+            tmp2 = tmp['type']
+
+            return tmp
 
         except:
             return False
@@ -215,6 +226,7 @@ fenetre.title("Flying Fish")
 fenetre.resizable(0,0)
 interface = Interface(fenetre)
 
+
 #definition modele
 
 modele = Modele()
@@ -224,6 +236,9 @@ modele = Modele()
 modele.start()
 
 fenetre.mainloop()
+
+
+
 
 modele.stop()
 modele.join()
