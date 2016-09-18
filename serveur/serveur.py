@@ -66,7 +66,7 @@ class Interface(Frame):
 
         self.textCompteur = Label(self.frameInfo, text=": personnes connectés ")
         self.textCompteur.grid(row=0, column=1, sticky=W)
-        self.boxCompteur = Label(self.frameInfo)
+        self.boxCompteur = Label(self.frameInfo, text=self.nombreConnectes)
         self.boxCompteur.grid(row=0, column=0)
 
         self.textNbreMessages = Label(self.frameInfo, text=": messages envoyés ")
@@ -357,6 +357,9 @@ class Server(threading.Thread):
         self.running = False
 
         self.clientsListing = []
+        self.numberMessages = 0
+
+        outputQueue.put_nowait({'etat':'Prêt'})
 
 
     def run(self):
@@ -391,9 +394,16 @@ class Server(threading.Thread):
 
         connections_calls, wlist, xlist = select.select([self.main_connection], [], [], 0.05)
 
-        for connection in connections_calls:
-            connection_with_client, connection_infos = connection.accept()
-            self.clientsListing.append(connection_with_client)
+        try:
+
+            for connection in connections_calls:
+                connection_with_client, connection_infos = connection.accept()
+                self.clientsListing.append(connection_with_client)
+
+                outputQueue.put_nowait({'nombreConnectes':len(self.clientsListing)})
+
+        except:
+            pass
 
     def requestsReading(self):
 
@@ -437,6 +447,7 @@ class Server(threading.Thread):
 
             try:
                 client.send(pickle.dumps([type, var]))
+                outputQueue.put_nowait({'nombreMessages':self.numberMessages})
 
             except:
                 outputQueue.put_nowait({'log':"Erreur: l'envoie des messages à echoué. (send_to_all in Server class)"})
@@ -453,6 +464,7 @@ class Server(threading.Thread):
 
 
         self.running = True
+        outputQueue.put_nowait({'etat': 'Activé'})
 
 
     def stop(self):
