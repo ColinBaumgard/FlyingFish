@@ -16,12 +16,6 @@ import pickle
 outputQueue = queue.Queue()
 inputQueue = queue.Queue()
 
-#outputQueue.put_nowait({'nombreMessages':1, 'nombreConnectes':0, 'etat':'off', 'log':''})
-#inputQueue.put_nowait({'port':0, 'nom':'', 'bouton':0})
-
-downQueue = queue.Queue()
-upQueue = queue.Queue()
-
 
 
 class Interface(Frame):
@@ -354,6 +348,116 @@ class Reseau(threading.Thread):
         self.running = False
 
 
+class Server(threading.Thread):
+
+    def __init__(self):
+        threading.Thread.__init__(self)
+
+        self.quit = False
+        self.running = False
+
+        self.clientsListing = []
+
+
+    def run(self):
+
+        while not self.quit:
+
+            self.checkInputsGui()
+
+            if self.running:
+
+                self.checkNewClients()
+
+                self.requestsReading()
+
+
+
+
+    def checkInputsGui(self):
+
+        try:
+            inputsDico = inputQueue.get_nowait()
+            port = inputsDico['port']
+            #nom = inputsDico['nom']
+
+            self.setConnexion(port)
+
+        except:
+            pass
+            #outputQueue.put_nowait({'log':'Erreur: In Server class in checkInputsGui.'})
+
+    def checkNewClients(self):
+
+        connections_calls, wlist, xlist = select.select([self.main_connection], [], [], 0.05)
+
+        for connection in connections_calls:
+            connection_with_client, connection_infos = connection.accept()
+            self.clientsListing.append(connection_with_client)
+
+    def requestsReading(self):
+
+        to_read_clients = []
+        try:
+            to_read_clients, wlist, xlist = select.select(self.clientsListing, [], [], 0.05)
+
+            for client in to_read_clients:
+
+                request_binary = client.recv(1024)
+                request = pickle.loads(request_binary)
+
+                isRequestFine = False
+
+                if isinstance(request, []):
+                    if len(request) == 2:
+                        self.answerRequest(request)
+                        isRequestFine = True
+
+                if not isRequestFine:
+                    outputQueue.put_nowait({'log':'Erreur : un client a envoyé un msg non conforme (requestsReading in Server class)'})
+
+
+
+
+        except select.error:
+            return []
+
+    def answerRequest(self, request):
+
+        if request[0] == 'message':
+            self.send_to_all(request[1])
+
+        else:
+            outputQueue.put_nowait({'log':'Erreur: requête "'+request[0]+'" pas encore implémentée.'})
+
+
+    def send_to_all(self, type, var):
+
+        for client in self.clientsListing:
+
+            try:
+                client.send(pickle.dumps([type, var]))
+
+            except:
+                outputQueue.put_nowait({'log':"Erreur: l'envoie des messages à echoué. (send_to_all in Server class)"})
+
+
+    def setConnexion(self, port, hote=''):
+
+
+
+        self.main_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.main_connection.bind((hote, port))
+        self.main_connection.listen(5)
+        outputQueue.put_nowait({'log': "Le serveur est lancé sur le port {}".format(port)})
+
+
+        self.running = True
+
+
+    def stop(self):
+
+        self.quit = True
 
 #definition fenetre
 
@@ -365,20 +469,18 @@ interface = Interface(fenetre)
 
 #definition modele
 
-modele = Modele()
-reseau = Reseau()
+server = Server()
+server.start()
 
 
 #lancement des threads
-modele.start()
-reseau.start()
+
 
 fenetre.mainloop()
 
 
+server.stop()
+server.join()
 
 
-modele.stop()
-reseau.stop()
-reseau.join()
-modele.join()
+
