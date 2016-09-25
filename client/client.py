@@ -99,10 +99,13 @@ class Interface(threading.Thread, Frame):
 
         inputQueue.put_nowait({'type':'cmd', 'host': self.containerHost.get(), 'port': int(self.containerPort.get()), 'name':self.containerName.get()})
 
+
     def sendMessage(self, event):
 
-        outputQueue.put_nowait({'type':'text', 'var':'{}: {}'.format(self.containerName.get(), self.champ_commande.get())})
-        blank= StringVar()
+        msg = '{}: {}'.format(self.containerName.get(), self.champ_commande.get())
+
+        inputQueue.put_nowait({'type': 'text', 'var': msg})
+        blank = StringVar()
         blank.set("")
         self.champ_commande.config(textvariable=blank)
 
@@ -113,7 +116,7 @@ class Interface(threading.Thread, Frame):
         try:
             outputDico = outputQueue.get_nowait()
             for cle, valeur in outputDico.items():
-                if (cle == 'state'):
+                if (cle == 'type'):
                     self.containerState.config(text=valeur)
                     self.containerState.pack(side='left', padx=5)
 
@@ -128,10 +131,12 @@ class Interface(threading.Thread, Frame):
 
 
 
-class client(threading.Thread):
+class Client(threading.Thread):
 
     def __init__(self):
         threading.Thread.__init__(self)
+
+        self.main_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         self.quit = False
         self.running = False
@@ -191,33 +196,24 @@ class client(threading.Thread):
 
         to_read_clients = []
         try:
-            to_read_clients, wlist, xlist = select.select(self.clientsListing, [], [], 0.05)
+            request_binary = self.main_connection.recv(1024)
+            request = pickle.loads(request_binary)
 
-            for client in to_read_clients:
+            if isinstance(request, []):
+                if len(request) == 2:
+                    self.answerRequest(request)
+                    isRequestFine = True
 
-                request_binary = client.recv(1024)
-                request = pickle.loads(request_binary)
+            if not isRequestFine:
+                outputQueue.put_nowait({'log':'Erreur : un client a envoyé un msg non conforme (requestsReading in Server class)'})
 
-                isRequestFine = False
-
-                if isinstance(request, []):
-                    if len(request) == 2:
-                        self.answerRequest(request)
-                        isRequestFine = True
-
-                if not isRequestFine:
-                    outputQueue.put_nowait({'log':'Erreur : un client a envoyé un msg non conforme (requestsReading in Server class)'})
-
-
-
-
-        except select.error:
-            return []
+        except:
+            pass
 
     def answerRequest(self, request):
 
-        if request[0] == 'message':
-            self.send_to_all(request[1])
+        if request[0] == 'text':
+            outputQueue.put_nowait({'log': '{}'.format(request[1])})
 
         else:
             outputQueue.put_nowait({'log':'Erreur: requête "'+request[0]+'" pas encore implémentée.'})
@@ -235,17 +231,16 @@ class client(threading.Thread):
                 outputQueue.put_nowait({'log':"Erreur: l'envoie des messages à echoué. (send_to_all in Server class)"})
 
 
-    def setConnexion(self, port, hote=''):
+    def setConnexion(self, port, hote='127.0.0.1'):
 
         try:
 
-            self.main_connection = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.main_connection.connect((hote, port))
-            outputQueue.put_nowait({'log': "Connexion établie".format(port)})
+            outputQueue.put_nowait({'log': "Connexion établie @{}:{} ".format(hote, port)})
 
 
             self.running = True
-            outputQueue.put_nowait({'state': 'Connecté'})
+            outputQueue.put_nowait({'type': 'state', 'var':'Connecté'})
 
         except:
             pass
@@ -261,6 +256,12 @@ class client(threading.Thread):
 fenetre = Tk()
 fenetre.title("Flying Fish")
 fenetre.resizable(0,0)
+
+client = Client()
+client.start()
+
+
+
 interface = Interface(fenetre)
 
 

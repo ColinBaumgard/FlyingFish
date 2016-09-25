@@ -127,227 +127,6 @@ class Interface(Frame):
             pass
 
 
-
-class Modele(threading.Thread):
-
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.running = True
-        
-        self.nom = ''
-        self.port = 0
-
-
-    def run(self):
-        i = 0
-        while self.running:
-            #tant qu'on a pas appuié sur stop
-            if self.getInput():
-                #si on a lancé
-                while self.getInput() == False and self.running:
-                    #tant que l'on a pas lancé une autre fois
-
-                    requeteClient = self.getQueue()
-
-                    if requeteClient != False:
-
-                        if requeteClient['type'] == 'msg':
-                            self.downQueue('send@all', requeteClient['msg'])
-                        else:
-                            self.addOutput({'log':'Commande serveur: ' + requeteClient['type'] + ' pas encore implémentée.'})
-
-
-
-
-    #Communication avec thread d'affichage (interface)
-    def addOutput(self, dicoNomValeur):
-
-        outputQueue.put_nowait(dicoNomValeur)
-
-    def getInput(self):
-
-        inputDico = {}
-        try:
-            inputDico = inputQueue.get_nowait()
-
-            for cle, valeur in inputDico.items():
-
-                if cle == 'port':
-                    self.port = valeur
-
-                elif cle == 'nom':
-                    self.nom = valeur
-
-            return True
-            
-            
-        except:
-            return False
-            
-
-
-    #communication avec thread de connexion reseau (comm avec clients)
-    def downQueue(self, type, var):
-
-        try:
-            downQueue.put_nowait({'type':type, 'var':var})
-        except:
-            self.addOutput({'log':"Erreur: downQueue in Modele"})
-
-    def getQueue(self):
-
-        try:
-            tmp = upQueue.get_nowait()
-            tmp2 = tmp['type']
-
-            return tmp
-
-        except:
-            return False
-
-    def stop(self):
-        self.running = False
-
-
-class Reseau(threading.Thread):
-
-    def __init__(self):
-        threading.Thread.__init__(self)
-        self.running = True
-
-        self.port = 4545
-        self.hote = ''
-
-        self.listeClients = []
-
-        #on lance une connexion
-
-        self.connexion_principale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.connexion_principale.bind((self.hote, self.port))
-        self.connexion_principale.listen(5)
-        self.addOutput({'log': "Le serveur est sur le port {}".format(self.port)})
-
-
-    def run(self):
-
-        while self.running :
-
-            queue = self.from_downQueue()
-            if queue != False:
-
-                if queue['type'] == 'port':
-                    self.port = queue['port']
-
-                    #on actualise la connexion au port demandé
-                    self.connexion_principale = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                    self.connexion_principale.bind((self.hote, self.port))
-                    self.connexion_principale.listen(5)
-                    self.addOutput({'log':"Le serveur est sur le port {}".format(self.port)})
-
-
-            # ecoute pour des demandes de connexion
-            self.checkDemandes()
-
-            #ecoute les requetes des clients
-            clients_a_lire = self.checkClients_a_lire()
-
-            #envoie info dans la Queue
-            try:
-                for client in clients_a_lire:
-                    msg_brut = client.recv(1024)
-                    msg_brut = msg_brut.loads()
-
-                    if isinstance(msg_brut, type([])):
-                        self.to_upQueue('recv', msg_brut)
-            except:
-                pass
-
-            #lit Queue modèle
-            msg_modele = self.from_downQueue()
-            try:
-                if msg_modele['type'] == 'send@all':
-                    self.send_at_all(msg_modele['var'])
-
-            except:
-                self.addOutput({'log': "Erreur lecture queue modèle in Reseau"})
-
-
-
-    def send_at_all(self, var):
-        try:
-            var = var.dumps()
-            for client in self.listeClients:
-                client.send(var)
-        except:
-            self.addOutput({'log': "Erreur in send@all in Reseau"})
-
-
-    def checkDemandes(self):
-
-        connexions_demandees, wlist, xlist = select.select([self.connexion_principale], [], [], 0.05)
-
-        for connexion in connexions_demandees:
-            connexion_avec_client, infos_connexion = connexion.accept()
-            self.listeClients.append(connexion_avec_client)
-
-    def checkClients_a_lire(self):
-        client_a_lire = []
-        try:
-            client_a_lire, wlist, xlist = select.select(self.listeClients, [], [], 0.05)
-            return client_a_lire
-        except select.error:
-            return []
-
-
-    # communication avec thread de modèle (comm avec clients)
-    def to_upQueue(self, type, var):
-
-        try:
-            upQueue.put_nowait({'type': type, 'var': var})
-        except:
-            self.addOutput({'log': "Erreur downQueue in Reseau"})
-
-    def from_downQueue(self):
-
-        try:
-            tmp = upQueue.get_nowait()
-            tmp2 = tmp['type']
-
-            return tmp
-
-        except:
-            return False
-
-    # Communication avec thread d'affichage (interface)
-    def addOutput(self, dicoNomValeur):
-
-        outputQueue.put_nowait(dicoNomValeur)
-
-    def getInput(self):
-
-        inputDico = {}
-        try:
-            inputDico = inputQueue.get_nowait()
-
-            for cle, valeur in inputDico.items():
-
-                if cle == 'port':
-                    self.port = valeur
-
-                elif cle == 'nom':
-                    self.nom = valeur
-
-            return True
-
-        except:
-            return False
-
-
-    def stop(self):
-        self.running = False
-
-
 class Server(threading.Thread):
 
     def __init__(self):
@@ -400,6 +179,9 @@ class Server(threading.Thread):
                 connection_with_client, connection_infos = connection.accept()
                 self.clientsListing.append(connection_with_client)
 
+                connection_with_client.send(pickle.dumps(['text', 'Bienvenu !']))
+                outputQueue.put_nowait({'nombreMessages': self.numberMessages})
+
                 outputQueue.put_nowait({'nombreConnectes':len(self.clientsListing)})
 
         except:
@@ -434,8 +216,8 @@ class Server(threading.Thread):
 
     def answerRequest(self, request):
 
-        if request[0] == 'message':
-            self.send_to_all(request[1])
+        if request[0] == 'text':
+            self.send_to_all('text', request[1])
 
         else:
             outputQueue.put_nowait({'log':'Erreur: requête "'+request[0]+'" pas encore implémentée.'})
@@ -447,6 +229,7 @@ class Server(threading.Thread):
 
             try:
                 client.send(pickle.dumps([type, var]))
+                self.nombreMessages += 1
                 outputQueue.put_nowait({'nombreMessages':self.numberMessages})
 
             except:
