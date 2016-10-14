@@ -189,8 +189,11 @@ class Server(threading.Thread):
 
     def requestsReading(self):
 
+
+
         to_read_clients = []
         try:
+
             to_read_clients, wlist, xlist = select.select(self.clientsListing, [], [], 0.05)
 
             for client in to_read_clients:
@@ -200,8 +203,9 @@ class Server(threading.Thread):
 
                 isRequestFine = False
 
-                if isinstance(request, []):
+                if type(request) == type([]):
                     if len(request) == 2:
+                        outputQueue.put_nowait({'log': request[1]})
                         self.answerRequest(request)
                         isRequestFine = True
 
@@ -229,7 +233,7 @@ class Server(threading.Thread):
 
             try:
                 client.send(pickle.dumps([type, var]))
-                self.nombreMessages += 1
+                self.numberMessages += 1
                 outputQueue.put_nowait({'nombreMessages':self.numberMessages})
 
             except:

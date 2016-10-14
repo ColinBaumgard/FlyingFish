@@ -31,7 +31,11 @@ class Interface(threading.Thread, Frame):
         self.defaultname = StringVar()
         self.defaultname.set('Newbie')
 
+        self.log = ''
+
         self.construire()
+
+        self.getAndShowOutput()
 
 
 
@@ -104,7 +108,7 @@ class Interface(threading.Thread, Frame):
 
         msg = '{}: {}'.format(self.containerName.get(), self.champ_commande.get())
 
-        inputQueue.put_nowait({'type': 'text', 'var': msg})
+        inputQueue.put_nowait({'type': 'text', 'var': msg})  #
         blank = StringVar()
         blank.set("")
         self.champ_commande.config(textvariable=blank)
@@ -115,15 +119,16 @@ class Interface(threading.Thread, Frame):
 
         try:
             outputDico = outputQueue.get_nowait()
-            for cle, valeur in outputDico.items():
-                if (cle == 'type'):
-                    self.containerState.config(text=valeur)
-                    self.containerState.pack(side='left', padx=5)
+            if outputDico["type"] == 'state':
+                self.containerState.config(text=outputDico["var"])
+                self.containerState.pack(side='left', padx=5)
 
-                elif cle == 'log':
-                    self.log = '{}\n{}'.format(self.log, valeur)
-                    self.console.config(text=self.log)
-                    self.console.pack()
+            elif outputDico["type"] == 'log':
+                self.log = '{}\n{}'.format(self.log, outputDico['var'])
+                self.console.config(state="normal")
+                self.console.insert(END, outputDico['var'] + '\n')
+                self.console.config(state="disable")
+                self.console.pack()
 
         except:
             pass
@@ -141,8 +146,7 @@ class Client(threading.Thread):
         self.quit = False
         self.running = False
 
-        outputQueue.put_nowait({'state':'Déconnecté'})
-
+        outputQueue.put_nowait({'type':'state', 'var':'Déconnecté'})
 
     def run(self):
 
@@ -152,10 +156,7 @@ class Client(threading.Thread):
 
             if self.running:
 
-                self.requestsReading() #not changed yet from there
-
-
-
+                self.requestsReading()  # not changed yet from there
 
     def checkInputsGui(self):
 
@@ -168,14 +169,15 @@ class Client(threading.Thread):
 
                 self.setConnexion(port, host)
 
-            elif inputsDico["type"] == 'text':
+            elif inputsDico["type"] == 'text' and self.running:
+
                 text = inputsDico['var']
                 self.send_to_server('text', text)
 
 
         except:
             pass
-            #outputQueue.put_nowait({'log':'Erreur: In Server class in checkInputsGui.'})
+            # outputQueue.put_nowait({'type':'log', 'var':'Erreur: In Server class in checkInputsGui.'})
 
     def checkNewClients(self):
 
@@ -195,17 +197,23 @@ class Client(threading.Thread):
     def requestsReading(self):
 
         to_read_clients = []
+        clients_a_lire = [self.main_connection]
         try:
-            request_binary = self.main_connection.recv(1024)
-            request = pickle.loads(request_binary)
+            to_read_clients, wlist, xlist = select.select(clients_a_lire, [], [], 0.05)
 
-            if isinstance(request, []):
-                if len(request) == 2:
-                    self.answerRequest(request)
-                    isRequestFine = True
+            for client in to_read_clients:
+                request_binary = client.recv(1024)
+                request = pickle.loads(request_binary)
 
-            if not isRequestFine:
-                outputQueue.put_nowait({'log':'Erreur : un client a envoyé un msg non conforme (requestsReading in Server class)'})
+                print(str(request))
+
+                if type(request) == type([]):
+                    if len(request) == 2:
+                        self.answerRequest(request)
+                        isRequestFine = True
+
+                if not isRequestFine:
+                    outputQueue.put_nowait({'type':'log', 'var':'Erreur : un client a envoyé un msg non conforme (requestsReading in Server class)'})
 
         except:
             pass
@@ -213,22 +221,19 @@ class Client(threading.Thread):
     def answerRequest(self, request):
 
         if request[0] == 'text':
-            outputQueue.put_nowait({'log': '{}'.format(request[1])})
+            outputQueue.put_nowait({'type':'log', 'var': '{}'.format(request[1])})
 
         else:
-            outputQueue.put_nowait({'log':'Erreur: requête "'+request[0]+'" pas encore implémentée.'})
+            outputQueue.put_nowait({'type':'log', 'var':'Erreur: requête "'+request[0]+'" pas encore implémentée.'})
 
 
     def send_to_server(self, type, var):
 
-        for client in self.clientsListing:
+        try:
+            self.main_connection.send(pickle.dumps([type, var]))
 
-            try:
-                client.send(pickle.dumps([type, var]))
-                outputQueue.put_nowait({'nombreMessages':self.numberMessages})
-
-            except:
-                outputQueue.put_nowait({'log':"Erreur: l'envoie des messages à echoué. (send_to_all in Server class)"})
+        except:
+            outputQueue.put_nowait({'type':'log', 'var':"Erreur: l'envoie des messages à echoué. (send_to_all in Server class)"})
 
 
     def setConnexion(self, port, hote='127.0.0.1'):
@@ -236,7 +241,7 @@ class Client(threading.Thread):
         try:
 
             self.main_connection.connect((hote, port))
-            outputQueue.put_nowait({'log': "Connexion établie @{}:{} ".format(hote, port)})
+            outputQueue.put_nowait({'type':'log', 'var': "Connexion établie @{}:{} ".format(hote, port)})
 
 
             self.running = True
@@ -267,3 +272,6 @@ interface = Interface(fenetre)
 
 
 interface.mainloop()
+
+client.stop()
+client.join()
