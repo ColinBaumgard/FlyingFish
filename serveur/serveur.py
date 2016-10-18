@@ -115,7 +115,7 @@ class Interface(Frame):
                     self.boxCompteur.grid()
                 elif(cle == 'log'):
                     self.boxLog.config(state="normal")
-                    self.boxLog.insert(END, '\n'+time.strftime("%H:%M:%S -> ")+valeur)
+                    self.boxLog.insert(END, '\n'+time.strftime("#%H:%M:%S#\n")+valeur)
                     self.boxLog.config(state="disable")
                     self.boxLog.pack()
                 elif(cle == 'etat'):
@@ -139,6 +139,11 @@ class Server(threading.Thread):
         self.numberMessages = 0
 
         outputQueue.put_nowait({'etat':'Prêt'})
+
+        a = socket.gethostbyname_ex(socket.gethostname())[2]
+        outputQueue.put_nowait(({'log':'Votre ip est : {}'.format(a)}))
+
+        print(a)
 
 
     def run(self):
